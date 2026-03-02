@@ -1,0 +1,16 @@
+[project]
+name = "turn-detection-demo"
+version = "0.1.0"
+description = "Pipecat voice agent comparing VAD-only vs semantic turn detection over Plivo telephony"
+requires-python = ">=3.11"
+dependencies = [
+    "pipecat-ai[anthropic,deepgram,elevenlabs,silero,local-smart-turn-v3,runner]",
+    "python-dotenv",
+    "loguru",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"

@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Turn Detection Metrics Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #09090f;
+    --surface: rgba(255,255,255,0.04);
+    --border: rgba(255,255,255,0.08);
+    --text: #e4e4e7;
+    --text-dim: #a1a1aa;
+    --blue: #323DFE;
+    --cyan: #56CAF4;
+    --purple: #CD3EF9;
+    --green: #34d399;
+    --red: #f87171;
+    --orange: #fb923c;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  h1, h2, h3 { font-family: 'Sora', sans-serif; }
+  code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* Layout */
+  .app {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    grid-template-rows: auto 1fr;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    grid-column: 1 / -1;
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .header h1 {
+    font-size: 18px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--blue), var(--cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .header .badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+
+  /* Sidebar */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+  }
+  .sidebar h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+
+  .session-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .session-card:hover { border-color: rgba(255,255,255,0.16); }
+  .session-card.active { border-color: var(--cyan); }
+  .session-card .mode-tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-bottom: 4px;
+  }
+  .session-card .mode-tag.semantic {
+    background: linear-gradient(135deg, var(--blue), var(--cyan));
+    color: #fff;
+  }
+  .session-card .mode-tag.vad_only {
+    background: linear-gradient(135deg, var(--purple), var(--blue));
+    color: #fff;
+  }
+  .session-card .meta {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .session-card .meta .mono { font-size: 11px; }
+  .session-card .stats {
+    display: flex;
+    gap: 12px;
+    margin-top: 6px;
+    font-size: 12px;
+  }
+  .session-card .stats span { color: var(--text-dim); }
+  .session-card .stats strong { color: var(--text); }
+  .session-card .live-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    background: var(--green);
+    border-radius: 50%;
+    margin-left: 4px;
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .sidebar-check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .sidebar-check input[type="checkbox"] {
+    accent-color: var(--cyan);
+  }
+
+  /* Main content */
+  .main {
+    padding: 24px;
+    overflow-y: auto;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 24px;
+  }
+  .tab-btn {
+    font-family: 'Sora', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .tab-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.16); }
+  .tab-btn.active {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--cyan);
+  }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .card h2 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Stats row */
+  .stat-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .stat-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    flex: 1;
+    min-width: 140px;
+  }
+  .stat-box .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .stat-box .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    font-weight: 500;
+  }
+  .stat-box .value.blue { color: var(--cyan); }
+  .stat-box .value.purple { color: var(--purple); }
+  .stat-box .value.green { color: var(--green); }
+
+  /* Chart containers */
+  .chart-wrap {
+    position: relative;
+    height: 280px;
+    margin-bottom: 8px;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-dim);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  .text-dim { color: var(--text-dim); }
+
+  /* Empty state */
+  .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+  }
+  .empty h2 { font-size: 16px; margin-bottom: 8px; color: var(--text); }
+  .empty p { font-size: 13px; max-width: 400px; margin: 0 auto; }
+
+  /* Gauge */
+  .gauge-wrap {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 8px 0;
+  }
+  .gauge-ring {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 500;
+  }
+  .gauge-label { font-size: 13px; color: var(--text-dim); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>Turn Detection Metrics Dashboard</h1>
+    <span class="badge" id="session-count">0 sessions</span>
+  </div>
+
+  <div class="sidebar" id="sidebar">
+    <h3>Sessions</h3>
+    <div id="session-list"><p class="text-dim" style="font-size:12px">Loading...</p></div>
+  </div>
+
+  <div class="main">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="live" onclick="switchTab('live')">Live</button>
+      <button class="tab-btn" data-tab="compare" onclick="switchTab('compare')">Compare</button>
+    </div>
+
+    <div id="tab-live">
+      <div class="empty" id="live-empty">
+        <h2>Select a session</h2>
+        <p>Click a session in the sidebar to view live metrics and per-turn data.</p>
+      </div>
+      <div id="live-content" style="display:none">
+        <div class="stat-row" id="live-stats"></div>
+        <div class="card">
+          <h2>Response Latency per Turn</h2>
+          <div class="chart-wrap"><canvas id="live-latency-chart"></canvas></div>
+        </div>
+        <div id="live-smart-turn-card" class="card" style="display:none">
+          <h2>Smart Turn Confidence</h2>
+          <div class="gauge-wrap" id="live-gauge"></div>
+        </div>
+        <div class="card">
+          <h2>Per-Turn Detail</h2>
+          <div style="overflow-x:auto">
+            <table id="live-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Latency</th>
+                  <th>Smart Turn</th>
+                  <th>User Said</th>
+                  <th>Bot Said</th>
+                </tr>
+              </thead>
+              <tbody id="live-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-compare" style="display:none">
+      <div class="empty" id="compare-empty">
+        <h2>Compare Sessions</h2>
+        <p>Use the checkboxes in the sidebar to select 2-5 sessions, then click Compare below.</p>
+        <button class="tab-btn" style="margin-top:16px" onclick="runCompare()">Compare Selected</button>
+      </div>
+      <div id="compare-content" style="display:none">
+        <button class="tab-btn" style="margin-bottom:20px" onclick="runCompare()">Refresh Comparison</button>
+        <div class="card">
+          <h2>Avg Response Latency by Configuration</h2>
+          <div class="chart-wrap"><canvas id="compare-tradeoff-chart"></canvas></div>
+        </div>
+        <div class="card">
+          <h2>Per-Turn Response Latency (All Sessions)</h2>
+          <div class="chart-wrap"><canvas id="compare-bar-chart"></canvas></div>
+        </div>
+        <div class="card">
+          <h2>Summary Statistics</h2>
+          <div style="overflow-x:auto">
+            <table id="compare-summary-table">
+              <thead>
+                <tr>
+                  <th>Session</th>
+                  <th>Mode</th>
+                  <th>Config</th>
+                  <th>Turns</th>
+                  <th>Avg Latency</th>
+                  <th>Min</th>
+                  <th>Max</th>
+                  <th>Confidence</th>
+                </tr>
+              </thead>
+              <tbody id="compare-summary-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card" id="compare-scatter-card" style="display:none">
+          <h2>Smart Turn Probability per Turn</h2>
+          <div class="chart-wrap"><canvas id="compare-scatter-chart"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ──────────────────────────────────────────────────────────
+let sessions = [];
+let selectedSessionId = null;
+let livePolling = null;
+let charts = {};
+
+const COLORS = {
+  semantic: { bg: 'rgba(86,202,244,0.8)', border: '#56CAF4', gradient: ['#323DFE','#56CAF4'] },
+  vad_300: { bg: 'rgba(205,62,249,0.8)', border: '#CD3EF9', gradient: ['#CD3EF9','#323DFE'] },
+  vad_500: { bg: 'rgba(205,62,249,0.6)', border: '#a855f7', gradient: ['#a855f7','#323DFE'] },
+  vad_700: { bg: 'rgba(205,62,249,0.4)', border: '#8b5cf6', gradient: ['#8b5cf6','#323DFE'] },
+  vad_1000: { bg: 'rgba(205,62,249,0.25)', border: '#7c3aed', gradient: ['#7c3aed','#323DFE'] },
+};
+
+const PALETTE = [
+  'rgba(86,202,244,0.8)',
+  'rgba(205,62,249,0.8)',
+  'rgba(52,211,153,0.8)',
+  'rgba(251,146,60,0.8)',
+  'rgba(248,113,113,0.8)',
+];
+
+// ─── API helpers ────────────────────────────────────────────────────
+const API = window.STATIC_DATA ? null : '';
+
+async function fetchSessions() {
+  if (window.SESSION_DATA) { return window.SESSION_DATA.map(s => summaryOf(s)); }
+  const r = await fetch('/api/sessions');
+  return r.json();
+}
+
+async function fetchSession(id) {
+  if (window.SESSION_DATA) { return window.SESSION_DATA.find(s => s.session_id === id); }
+  const r = await fetch(`/api/sessions/${id}`);
+  return r.json();
+}
+
+async function fetchCompare(ids) {
+  if (window.SESSION_DATA) { return window.SESSION_DATA.filter(s => ids.includes(s.session_id)); }
+  const r = await fetch(`/api/compare?ids=${ids.join(',')}`);
+  return r.json();
+}
+
+function summaryOf(s) {
+  return {
+    session_id: s.session_id, mode: s.mode, started_at: s.started_at,
+    ended_at: s.ended_at, config: s.config, summary: s.summary,
+  };
+}
+
+// ─── Session label ──────────────────────────────────────────────────
+function sessionLabel(s) {
+  if (s.mode === 'semantic') return 'Semantic (Smart Turn)';
+  const ms = Math.round((s.config?.vad_stop_secs || 0.7) * 1000);
+  return `VAD ${ms}ms`;
+}
+
+function sessionColorKey(s) {
+  if (s.mode === 'semantic') return 'semantic';
+  const ms = Math.round((s.config?.vad_stop_secs || 0.7) * 1000);
+  return `vad_${ms}`;
+}
+
+function sessionColor(s, idx) {
+  const key = sessionColorKey(s);
+  if (COLORS[key]) return COLORS[key];
+  return { bg: PALETTE[idx % PALETTE.length], border: PALETTE[idx % PALETTE.length] };
+}
+
+// ─── Tabs ───────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('tab-live').style.display = tab === 'live' ? '' : 'none';
+  document.getElementById('tab-compare').style.display = tab === 'compare' ? '' : 'none';
+}
+
+// ─── Sidebar ────────────────────────────────────────────────────────
+async function loadSessions() {
+  sessions = await fetchSessions();
+  document.getElementById('session-count').textContent = `${sessions.length} session${sessions.length !== 1 ? 's' : ''}`;
+  renderSidebar();
+}
+
+function renderSidebar() {
+  const el = document.getElementById('session-list');
+  if (!sessions.length) {
+    el.innerHTML = '<p class="text-dim" style="font-size:12px">No sessions yet. Run the bot to generate data.</p>';
+    return;
+  }
+  el.innerHTML = sessions.map(s => {
+    const label = sessionLabel(s);
+    const modeClass = s.mode;
+    const isActive = s.session_id === selectedSessionId;
+    const isLive = !s.ended_at;
+    const turns = s.summary?.total_turns || 0;
+    const avg = s.summary?.avg_response_latency_ms || 0;
+    return `
+      <div class="session-card ${isActive ? 'active' : ''}" onclick="selectSession('${s.session_id}')">
+        <div class="sidebar-check" onclick="event.stopPropagation()">
+          <input type="checkbox" id="chk-${s.session_id}" value="${s.session_id}">
+          <span class="mode-tag ${modeClass}">${label}</span>
+          ${isLive ? '<span class="live-dot"></span>' : ''}
+        </div>
+        <div class="stats">
+          <span>${turns} turn${turns !== 1 ? 's' : ''}</span>
+          <span>avg <strong class="mono">${avg}ms</strong></span>
+        </div>
+        <div class="meta mono">${s.session_id.slice(0,8)}...</div>
+      </div>`;
+  }).join('');
+}
+
+// ─── Live View ──────────────────────────────────────────────────────
+async function selectSession(id) {
+  selectedSessionId = id;
+  renderSidebar();
+  switchTab('live');
+  if (livePolling) clearInterval(livePolling);
+  await renderLive(id);
+  // Poll if session is still active
+  livePolling = setInterval(async () => {
+    const s = await fetchSession(id);
+    if (s) {
+      renderLiveData(s);
+      if (s.ended_at) clearInterval(livePolling);
+    }
+  }, 1000);
+}
+
+async function renderLive(id) {
+  const s = await fetchSession(id);
+  if (!s) return;
+  document.getElementById('live-empty').style.display = 'none';
+  document.getElementById('live-content').style.display = '';
+  renderLiveData(s);
+}
+
+function renderLiveData(s) {
+  const sum = s.summary || {};
+  // Stats
+  document.getElementById('live-stats').innerHTML = `
+    <div class="stat-box">
+      <div class="label">Turns</div>
+      <div class="value blue">${sum.total_turns || 0}</div>
+    </div>
+    <div class="stat-box">
+      <div class="label">Avg Latency</div>
+      <div class="value purple">${sum.avg_response_latency_ms || 0}<span style="font-size:14px">ms</span></div>
+    </div>
+    <div class="stat-box">
+      <div class="label">Min / Max</div>
+      <div class="value green">${sum.min_response_latency_ms || 0}<span style="font-size:14px">ms</span> / ${sum.max_response_latency_ms || 0}<span style="font-size:14px">ms</span></div>
+    </div>
+    ${sum.avg_smart_turn_probability != null ? `
+    <div class="stat-box">
+      <div class="label">Avg Confidence</div>
+      <div class="value blue">${(sum.avg_smart_turn_probability * 100).toFixed(1)}<span style="font-size:14px">%</span></div>
+    </div>` : ''}
+  `;
+
+  // Latency chart
+  renderLiveLatencyChart(s.turns || []);
+
+  // Smart Turn gauge
+  const stCard = document.getElementById('live-smart-turn-card');
+  const lastST = [...(s.turns || [])].reverse().find(t => t.smart_turn);
+  if (lastST && lastST.smart_turn) {
+    stCard.style.display = '';
+    const p = lastST.smart_turn.probability;
+    const pct = (p * 100).toFixed(1);
+    const hue = p > 0.7 ? 160 : p > 0.4 ? 40 : 0;
+    document.getElementById('live-gauge').innerHTML = `
+      <div class="gauge-ring" style="background:conic-gradient(hsl(${hue},80%,55%) ${pct}%, var(--border) ${pct}%)">
+        <span style="background:var(--bg);border-radius:50%;width:60px;height:60px;display:flex;align-items:center;justify-content:center">${pct}%</span>
+      </div>
+      <div>
+        <div class="gauge-label">Last turn confidence: <strong>${pct}%</strong></div>
+        <div class="gauge-label">Inference: <strong>${lastST.smart_turn.inference_time_ms}ms</strong></div>
+        <div class="gauge-label">E2E: <strong>${lastST.smart_turn.e2e_processing_time_ms}ms</strong></div>
+      </div>`;
+  } else {
+    stCard.style.display = 'none';
+  }
+
+  // Table
+  const tbody = document.getElementById('live-table-body');
+  tbody.innerHTML = (s.turns || []).map(t => `
+    <tr>
+      <td class="mono">${t.turn_number}</td>
+      <td class="mono">${t.response_latency_ms}ms</td>
+      <td class="mono">${t.smart_turn ? `${(t.smart_turn.probability * 100).toFixed(0)}% / ${t.smart_turn.inference_time_ms}ms` : '-'}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${escHtml(t.user_text || '')}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${escHtml(t.bot_text || '')}</td>
+    </tr>`).join('');
+}
+
+function renderLiveLatencyChart(turns) {
+  const ctx = document.getElementById('live-latency-chart');
+  if (charts.liveLatency) charts.liveLatency.destroy();
+  charts.liveLatency = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: turns.map(t => `Turn ${t.turn_number}`),
+      datasets: [{
+        label: 'Response Latency (ms)',
+        data: turns.map(t => t.response_latency_ms),
+        borderColor: '#56CAF4',
+        backgroundColor: 'rgba(86,202,244,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 4,
+        pointBackgroundColor: '#56CAF4',
+      }]
+    },
+    options: chartOpts('ms'),
+  });
+}
+
+// ─── Compare View ───────────────────────────────────────────────────
+async function runCompare() {
+  const checked = [...document.querySelectorAll('#session-list input[type=checkbox]:checked')].map(c => c.value);
+  if (checked.length < 2) {
+    alert('Select at least 2 sessions to compare.');
+    return;
+  }
+  if (checked.length > 5) {
+    alert('Select at most 5 sessions.');
+    return;
+  }
+  const data = await fetchCompare(checked);
+  document.getElementById('compare-empty').style.display = 'none';
+  document.getElementById('compare-content').style.display = '';
+  renderCompare(data);
+}
+
+function renderCompare(data) {
+  // Sort: VAD by threshold ascending, semantic last
+  data.sort((a, b) => {
+    if (a.mode === 'semantic' && b.mode !== 'semantic') return 1;
+    if (a.mode !== 'semantic' && b.mode === 'semantic') return -1;
+    return (a.config?.vad_stop_secs || 0) - (b.config?.vad_stop_secs || 0);
+  });
+
+  renderTradeoffChart(data);
+  renderCompareBarChart(data);
+  renderCompareSummaryTable(data);
+  renderCompareScatter(data);
+}
+
+function renderTradeoffChart(data) {
+  const ctx = document.getElementById('compare-tradeoff-chart');
+  if (charts.tradeoff) charts.tradeoff.destroy();
+
+  const labels = data.map(s => sessionLabel(s));
+  const values = data.map(s => s.summary?.avg_response_latency_ms || 0);
+  const colors = data.map((s, i) => sessionColor(s, i).bg);
+  const borders = data.map((s, i) => sessionColor(s, i).border);
+
+  charts.tradeoff = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Avg Response Latency (ms)',
+        data: values,
+        backgroundColor: colors,
+        borderColor: borders,
+        borderWidth: 1,
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      ...chartOpts('ms'),
+      plugins: {
+        ...chartOpts('ms').plugins,
+        legend: { display: false },
+      },
+    },
+  });
+}
+
+function renderCompareBarChart(data) {
+  const ctx = document.getElementById('compare-bar-chart');
+  if (charts.compareBar) charts.compareBar.destroy();
+
+  const maxTurns = Math.max(...data.map(s => (s.turns || []).length));
+  const labels = Array.from({ length: maxTurns }, (_, i) => `Turn ${i + 1}`);
+
+  const datasets = data.map((s, i) => ({
+    label: sessionLabel(s),
+    data: (s.turns || []).map(t => t.response_latency_ms),
+    backgroundColor: sessionColor(s, i).bg,
+    borderColor: sessionColor(s, i).border,
+    borderWidth: 1,
+    borderRadius: 4,
+  }));
+
+  charts.compareBar = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: chartOpts('ms'),
+  });
+}
+
+function renderCompareSummaryTable(data) {
+  const tbody = document.getElementById('compare-summary-body');
+  tbody.innerHTML = data.map(s => {
+    const sum = s.summary || {};
+    const conf = sum.avg_smart_turn_probability != null
+      ? `${(sum.avg_smart_turn_probability * 100).toFixed(1)}%`
+      : '-';
+    const configLabel = s.mode === 'semantic'
+      ? `stop=${s.config?.smart_turn_stop_secs || '-'}s`
+      : `silence=${s.config?.vad_stop_secs || '-'}s`;
+    return `
+      <tr>
+        <td class="mono">${s.session_id.slice(0, 8)}</td>
+        <td><span class="mode-tag ${s.mode}" style="font-size:11px">${sessionLabel(s)}</span></td>
+        <td class="mono">${configLabel}</td>
+        <td class="mono">${sum.total_turns || 0}</td>
+        <td class="mono">${sum.avg_response_latency_ms || 0}ms</td>
+        <td class="mono">${sum.min_response_latency_ms || 0}ms</td>
+        <td class="mono">${sum.max_response_latency_ms || 0}ms</td>
+        <td class="mono">${conf}</td>
+      </tr>`;
+  }).join('');
+}
+
+function renderCompareScatter(data) {
+  const semanticSessions = data.filter(s => s.mode === 'semantic');
+  const card = document.getElementById('compare-scatter-card');
+  if (!semanticSessions.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+
+  const ctx = document.getElementById('compare-scatter-chart');
+  if (charts.scatter) charts.scatter.destroy();
+
+  const datasets = semanticSessions.map((s, i) => ({
+    label: `${s.session_id.slice(0, 8)} confidence`,
+    data: (s.turns || []).filter(t => t.smart_turn).map(t => ({
+      x: t.turn_number,
+      y: t.smart_turn.probability * 100,
+    })),
+    backgroundColor: 'rgba(86,202,244,0.7)',
+    borderColor: '#56CAF4',
+    pointRadius: 6,
+  }));
+
+  charts.scatter = new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets },
+    options: {
+      ...chartOpts('%'),
+      scales: {
+        x: { title: { display: true, text: 'Turn Number', color: '#a1a1aa' }, ticks: { color: '#a1a1aa' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { title: { display: true, text: 'Confidence %', color: '#a1a1aa' }, min: 0, max: 100, ticks: { color: '#a1a1aa' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+      }
+    }
+  });
+}
+
+// ─── Chart defaults ─────────────────────────────────────────────────
+function chartOpts(unit) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: '#a1a1aa', font: { family: 'Inter', size: 12 } } },
+      tooltip: { backgroundColor: '#18181b', titleColor: '#e4e4e7', bodyColor: '#e4e4e7', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1 },
+    },
+    scales: {
+      x: { ticks: { color: '#a1a1aa' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+      y: { beginAtZero: true, ticks: { color: '#a1a1aa', callback: v => `${v}${unit}` }, grid: { color: 'rgba(255,255,255,0.05)' } },
+    },
+  };
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ─── Init ───────────────────────────────────────────────────────────
+loadSessions();
+// Refresh session list every 5s
+setInterval(loadSessions, 5000);
+</script>
+</body>
+</html>

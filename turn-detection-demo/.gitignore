@@ -7,4 +7,5 @@ dist/
 build/
 .venv/
 venv/
-data/sessions/
+data/
+.DS_Store
